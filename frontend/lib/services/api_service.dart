@@ -102,6 +102,12 @@ class ApiService {
     return data as Map<String, dynamic>;
   }
 
+  Future<User> createUser(String displayName, String pin) async {
+    final data = await _request('POST', '/users',
+        body: {'display_name': displayName, 'pin': pin}, auth: false);
+    return User.fromJson(data as Map<String, dynamic>);
+  }
+
   Future<User> me() async =>
       User.fromJson(await _request('GET', '/auth/me') as Map<String, dynamic>);
 

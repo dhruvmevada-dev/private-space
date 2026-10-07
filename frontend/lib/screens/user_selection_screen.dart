@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../services/api_service.dart';
 import '../widgets/user_tile.dart';
 import 'pin_login_screen.dart';
+import 'create_space_screen.dart';
 
 class UserSelectionScreen extends StatefulWidget {
   /// Optional message shown on arrival (e.g. session expired).
@@ -44,6 +45,18 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
     }
   }
 
+  Future<void> _create() async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const CreateSpaceScreen()),
+    );
+    if (created == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Space created. Select it to log in.')),
+      );
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -59,7 +72,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
     } else if (_users == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (_users!.isEmpty) {
-      body = const Center(child: Text('No spaces have been created yet.'));
+      body = const Center(child: Text('No spaces yet.\nTap "Create a space" to add one.'));
     } else {
       body = ListView(
         children: [
@@ -75,6 +88,13 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
     }
 
     return Scaffold(
+      floatingActionButton: _error == null
+          ? FloatingActionButton.extended(
+        onPressed: _create,
+        icon: const Icon(Icons.add),
+        label: const Text('Create a space'),
+      )
+          : null,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),

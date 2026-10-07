@@ -39,6 +39,20 @@ class ChangePinRequest(BaseModel):
 
     _v = field_validator("current_pin", "new_pin")(_check_pin)
 
+class UserCreate(BaseModel):
+    display_name: str
+    pin: str
+
+    _v = field_validator("pin")(_check_pin)
+
+    @field_validator("display_name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not 1 <= len(v) <= 50:
+            raise ValueError("Name must be 1 to 50 characters")
+        return v
+
 
 class MessageCreate(BaseModel):
     recipient_id: int
