@@ -1,0 +1,21 @@
+# Optional Render Blueprint (New + > Blueprint). Manual setup is described in the README.
+databases:
+  - name: private-space-db
+    plan: free
+
+services:
+  - type: web
+    name: private-space-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: private-space-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_ENV
+        value: production
