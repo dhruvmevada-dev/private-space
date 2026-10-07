@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'config.dart';
 import 'screens/home_screen.dart';
 import 'screens/user_selection_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'theme.dart';
+import 'widgets/common.dart';
 
-void main() => runApp(const PrivateSpaceApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: AppColors.bg,
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
+  runApp(const PrivateSpaceApp());
+}
 
 class PrivateSpaceApp extends StatelessWidget {
   const PrivateSpaceApp({super.key});
@@ -17,10 +29,8 @@ class PrivateSpaceApp extends StatelessWidget {
       title: 'Private Space',
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF3F51B5),
-      ),
+      theme: buildTheme(),
+      themeMode: ThemeMode.dark,
       home: const _Splash(),
     );
   }
@@ -58,22 +68,36 @@ class _SplashState extends State<_Splash> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: _error == null
-            ? const CircularProgressIndicator()
-            : Padding(
-                padding: const EdgeInsets.all(32),
+    return AppScaffold(
+      body: _error != null
+          ? ErrorView(message: _error!, onRetry: _check)
+          : Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 700),
+                curve: Curves.easeOutBack,
+                builder: (context, v, child) => Opacity(
+                  opacity: v.clamp(0.0, 1.0),
+                  child: Transform.scale(scale: 0.7 + 0.3 * v, child: child),
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(onPressed: _check, child: const Text('Retry')),
+                  children: const [
+                    LogoMark(size: 84),
+                    SizedBox(height: 22),
+                    Text(
+                      'PRIVATE SPACE',
+                      style: TextStyle(
+                        fontSize: 18,
+                        letterSpacing: 5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.text,
+                      ),
+                    ),
                   ],
                 ),
               ),
-      ),
+            ),
     );
   }
 }

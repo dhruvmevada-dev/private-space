@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../models/user.dart';
 import '../services/api_service.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
 import '../widgets/user_tile.dart';
-import 'pin_login_screen.dart';
 import 'create_space_screen.dart';
+import 'pin_login_screen.dart';
 
 class UserSelectionScreen extends StatefulWidget {
   /// Optional message shown on arrival (e.g. session expired).
@@ -59,55 +61,73 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    Widget body;
+    Widget list;
     if (_error != null) {
-      body = Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(_error!, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _load, child: const Text('Retry')),
-        ]),
-      );
+      list = ErrorView(message: _error!, onRetry: _load);
     } else if (_users == null) {
-      body = const Center(child: CircularProgressIndicator());
+      list = const SingleChildScrollView(child: SkeletonList(count: 3));
     } else if (_users!.isEmpty) {
-      body = const Center(child: Text('No spaces yet.\nTap "Create a space" to add one.'));
+      list = const Center(
+        child: Text(
+          'No spaces yet.\nTap "Create a space" to add one.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.muted, height: 1.5),
+        ),
+      );
     } else {
-      body = ListView(
+      list = ListView(
+        padding: const EdgeInsets.only(bottom: 96),
         children: [
-          for (final u in _users!)
-            UserTile(
-              user: u,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => PinLoginScreen(user: u)),
+          for (var i = 0; i < _users!.length; i++)
+            FadeSlideIn(
+              index: i,
+              child: UserTile(
+                user: _users![i],
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => PinLoginScreen(user: _users![i])),
+                ),
               ),
             ),
         ],
       );
     }
 
-    return Scaffold(
+    return AppScaffold(
       floatingActionButton: _error == null
           ? FloatingActionButton.extended(
-        onPressed: _create,
-        icon: const Icon(Icons.add),
-        label: const Text('Create a space'),
-      )
+              onPressed: _create,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create a space'),
+            )
           : null,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 24),
-              Text('PRIVATE SPACE',
-                  style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 3)),
-              const SizedBox(height: 8),
-              Text('Choose your space', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 24),
-              Expanded(child: body),
+              const FadeSlideIn(child: LogoMark(size: 56)),
+              const SizedBox(height: 22),
+              const FadeSlideIn(
+                index: 1,
+                child: Text('Private Space',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+              ),
+              const SizedBox(height: 6),
+              const FadeSlideIn(
+                index: 2,
+                child: Text('Write freely. They can only read.',
+                    style: TextStyle(fontSize: 15, color: AppColors.muted)),
+              ),
+              const SizedBox(height: 32),
+              const Text('CHOOSE YOUR SPACE',
+                  style: TextStyle(
+                      fontSize: 12,
+                      letterSpacing: 2,
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 14),
+              Expanded(child: list),
             ],
           ),
         ),

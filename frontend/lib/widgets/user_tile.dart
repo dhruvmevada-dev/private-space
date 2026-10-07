@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/user.dart';
+import '../theme.dart';
+import 'common.dart';
 
 class UserTile extends StatelessWidget {
   final User user;
@@ -10,13 +12,32 @@ class UserTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        leading: CircleAvatar(child: Text(user.displayName[0].toUpperCase())),
-        title: Text(user.displayName, style: Theme.of(context).textTheme.titleMedium),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: AppColors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.outline),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Avatar(name: user.displayName, size: 48, heroTag: 'avatar-${user.id}'),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(user.displayName,
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

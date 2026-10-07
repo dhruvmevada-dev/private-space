@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
 import '../widgets/pin_field.dart';
 
 class CreateSpaceScreen extends StatefulWidget {
@@ -14,14 +16,18 @@ class _CreateSpaceScreenState extends State<CreateSpaceScreen> {
   final _name = TextEditingController();
   final _pin = TextEditingController();
   final _confirm = TextEditingController();
+  final _f1 = FocusNode();
+  final _f2 = FocusNode();
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    _name.dispose();
-    _pin.dispose();
-    _confirm.dispose();
+    for (final c in [_name, _pin, _confirm]) {
+      c.dispose();
+    }
+    _f1.dispose();
+    _f2.dispose();
     super.dispose();
   }
 
@@ -53,40 +59,72 @@ class _CreateSpaceScreenState extends State<CreateSpaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AppScaffold(
       appBar: AppBar(title: const Text('Create a space')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          TextField(
-            controller: _name,
-            maxLength: 50,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              counterText: '',
-              border: OutlineInputBorder(),
-            ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          child: Column(
+            children: [
+              FadeSlideIn(
+                child: TextField(
+                  controller: _name,
+                  maxLength: 50,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _f1.requestFocus(),
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    counterText: '',
+                    prefixIcon: Icon(Icons.person_outline_rounded),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              FadeSlideIn(
+                index: 1,
+                child: PinField(
+                  controller: _pin,
+                  label: 'Choose a 4-digit PIN',
+                  focusNode: _f1,
+                  onCompleted: (_) => _f2.requestFocus(),
+                ),
+              ),
+              const SizedBox(height: 28),
+              FadeSlideIn(
+                index: 2,
+                child: PinField(
+                  controller: _confirm,
+                  label: 'Confirm PIN',
+                  focusNode: _f2,
+                  hasError: _error != null && _error!.contains('match'),
+                ),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                child: _error == null
+                    ? const SizedBox(width: double.infinity)
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: Text(_error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.error, height: 1.4)),
+                      ),
+              ),
+              const SizedBox(height: 32),
+              FadeSlideIn(
+                index: 3,
+                child: GradientButton(
+                  label: 'Create',
+                  icon: Icons.check_rounded,
+                  loading: _busy,
+                  onPressed: _busy ? null : _submit,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          PinField(controller: _pin, label: 'PIN (4 digits)'),
-          const SizedBox(height: 16),
-          PinField(controller: _confirm, label: 'Confirm PIN'),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _busy ? null : _submit,
-            child: _busy
-                ? const SizedBox(
-                height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Create'),
-          ),
-        ],
+        ),
       ),
     );
   }

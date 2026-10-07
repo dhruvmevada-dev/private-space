@@ -5,6 +5,8 @@ import '../config.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../services/api_service.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
 import '../widgets/message_bubble.dart';
 
 /// One person's space, with two one-way views:
@@ -22,6 +24,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _api = ApiService.instance;
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  final _freshIds = <int>{};
 
   String _direction = 'sent';
   MessageThread? _thread;
@@ -34,6 +37,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     // Open on "Written to me" if there is something new to read.
     if (widget.chat.unreadCount > 0) _direction = 'received';
+    _input.addListener(() => setState(() {}));
     _load();
   }
 
@@ -57,7 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _thread = t;
         _loading = false;
       });
-      _jumpToBottom();
+      _scrollToBottom(animate: false);
     } on ApiException catch (e) {
       if (!mounted || dir != _direction || e.statusCode == 401) return;
       setState(() {
@@ -67,9 +71,16 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _jumpToBottom() {
+  void _scrollToBottom({required bool animate}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      if (!_scroll.hasClients) return;
+      final max = _scroll.position.maxScrollExtent;
+      if (animate) {
+        _scroll.animateTo(max,
+            duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+      } else {
+        _scroll.jumpTo(max);
+      }
     });
   }
 
@@ -87,8 +98,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final m = await _api.sendMessage(widget.chat.userId, text);
       if (!mounted) return;
       _input.clear();
+      _freshIds.add(m.id);
       setState(() => _thread = _thread?.withMessage(m));
-      _jumpToBottom();
+      _scrollToBottom(animate: true);
     } on ApiException catch (e) {
       if (mounted && e.statusCode != 401) _snack(e.message);
     } finally {
@@ -96,10 +108,18 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _switchTo(String dir) {
+    if (dir == _direction) return;
+    setState(() {
+      _direction = dir;
+      _thread = null;
+    });
+    _load();
+  }
+
   String _dayLabel(DateTime day) {
-    final today = DateTime.now();
-    final d0 = DateTime(today.year, today.month, today.day);
-    final diff = d0.difference(day).inDays;
+    final now = DateTime.now();
+    final diff = DateTime(now.year, now.month, now.day).difference(day).inDays;
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Yesterday';
     return DateFormat.yMMMd().format(day);
@@ -113,39 +133,51 @@ class _ChatScreenState extends State<ChatScreen> {
       final day = DateTime(l.year, l.month, l.day);
       if (lastDay != day) {
         lastDay = day;
-        out.add(Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Center(
-            child: Text(_dayLabel(day), style: Theme.of(context).textTheme.labelMedium),
+        out.add(Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceHigh,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(_dayLabel(day),
+                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
           ),
         ));
       }
-      out.add(MessageBubble(message: m, isMine: mine));
+      out.add(MessageBubble(message: m, isMine: mine, animate: _freshIds.contains(m.id)));
     }
     return out;
   }
 
   Widget _messages() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(_error!, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: _load, child: const Text('Retry')),
-        ]),
-      );
-    }
-    final t = _thread!;
+    if (_error != null) return ErrorView(message: _error!, onRetry: _load);
+    final t = _thread;
+    if (t == null) return const SizedBox.shrink();
     if (t.messages.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Text(
-            t.canWrite
-                ? 'Nothing here yet.\nWrite something to ${widget.chat.displayName}.'
-                : '${widget.chat.displayName} has not written anything to you yet.',
-            textAlign: TextAlign.center,
+          child: FadeSlideIn(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  t.canWrite ? Icons.edit_note_rounded : Icons.inbox_outlined,
+                  size: 52,
+                  color: AppColors.muted,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  t.canWrite
+                      ? 'Nothing here yet.\nWrite something to ${widget.chat.displayName}.'
+                      : '${widget.chat.displayName} has not written\nanything to you yet.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.muted, height: 1.5),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -153,7 +185,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final items = _items(t.messages, t.canWrite);
     return ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       itemCount: items.length,
       itemBuilder: (_, i) => items[i],
     );
@@ -161,47 +193,102 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _bottomBar() {
     final t = _thread;
-    if (t == null || _loading && t.messages.isEmpty && _error == null) {
-      return const SizedBox.shrink();
-    }
+    if (t == null) return const SizedBox.shrink();
     if (!t.canWrite) {
       return SafeArea(
         top: false,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: const Text('You can only read this space.', textAlign: TextAlign.center),
+          margin: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.outline),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline_rounded, size: 17, color: AppColors.muted),
+              SizedBox(width: 8),
+              Text('You can only read this space.',
+                  style: TextStyle(color: AppColors.muted)),
+            ],
+          ),
         ),
       );
     }
+
+    final canSend = _input.text.trim().isNotEmpty && !_sending;
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
+        padding: const EdgeInsets.fromLTRB(14, 6, 12, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: TextField(
-                controller: _input,
-                minLines: 1,
-                maxLines: 5,
-                maxLength: maxMessageLength,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Write something...',
-                  counterText: '',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.outline),
+                ),
+                child: TextField(
+                  controller: _input,
+                  minLines: 1,
+                  maxLines: 5,
+                  maxLength: maxMessageLength,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: const TextStyle(fontSize: 15.5),
+                  decoration: const InputDecoration(
+                    hintText: 'Write something...',
+                    counterText: '',
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 4),
-            IconButton.filled(
-              onPressed: _sending ? null : _send,
-              icon: const Icon(Icons.send),
-              tooltip: 'Send',
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: canSend ? _send : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: canSend || _sending ? AppColors.gradient : null,
+                  color: canSend || _sending ? null : AppColors.surfaceHigh,
+                  boxShadow: canSend
+                      ? [
+                          BoxShadow(
+                            color: AppColors.primary.withOpacity(0.4),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: _sending
+                      ? const Padding(
+                          key: ValueKey('spin'),
+                          padding: EdgeInsets.all(14),
+                          child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                        )
+                      : Icon(
+                          Icons.arrow_upward_rounded,
+                          key: const ValueKey('send'),
+                          color: canSend ? Colors.white : AppColors.muted,
+                        ),
+                ),
+              ),
             ),
           ],
         ),
@@ -211,40 +298,128 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AppScaffold(
       appBar: AppBar(
-        title: Row(children: [
-          CircleAvatar(radius: 16, child: Text(widget.chat.displayName[0].toUpperCase())),
-          const SizedBox(width: 12),
-          Text(widget.chat.displayName),
-        ]),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Avatar(
+              name: widget.chat.displayName,
+              size: 38,
+              heroTag: 'avatar-${widget.chat.userId}',
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.chat.displayName,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                const Text('Private space',
+                    style: TextStyle(fontSize: 12, color: AppColors.muted)),
+              ],
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'sent', label: Text('Written by me')),
-                  ButtonSegment(value: 'received', label: Text('Written to me')),
-                ],
-                selected: {_direction},
-                onSelectionChanged: (s) {
-                  if (s.first == _direction) return;
-                  setState(() {
-                    _direction = s.first;
-                    _thread = null;
-                  });
-                  _load();
-                },
-              ),
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+            child: _DirectionToggle(value: _direction, onChanged: _switchTo),
+          ),
+          Expanded(
+            child: Stack(
+              children: [
+                AnimatedOpacity(
+                  opacity: _loading ? 0 : 1,
+                  duration: const Duration(milliseconds: 250),
+                  child: _messages(),
+                ),
+                if (_loading)
+                  const Center(
+                    child: SizedBox(
+                      height: 28,
+                      width: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
+                  ),
+              ],
             ),
           ),
-          Expanded(child: _messages()),
-          _bottomBar(),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: _bottomBar(),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _DirectionToggle extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _DirectionToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: LayoutBuilder(
+        builder: (context, cons) {
+          final w = cons.maxWidth / 2;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                left: value == 'sent' ? 0 : w,
+                top: 0,
+                bottom: 0,
+                width: w,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.gradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(child: _segment('Written by me', 'sent')),
+                  Expanded(child: _segment('Written to me', 'received')),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _segment(String label, String v) {
+    final selected = value == v;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(v),
+      child: Center(
+        child: AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : AppColors.muted,
+          ),
+          child: Text(label),
+        ),
       ),
     );
   }

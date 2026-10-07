@@ -90,6 +90,12 @@ class ApiService {
     return 'Something went wrong. Please try again.';
   }
 
+  Future<User> createUser(String displayName, String pin) async {
+    final data = await _request('POST', '/users',
+        body: {'display_name': displayName, 'pin': pin}, auth: false);
+    return User.fromJson(data as Map<String, dynamic>);
+  }
+
   Future<List<User>> getUsers() async {
     final data = await _request('GET', '/users', auth: false) as List;
     return data.map((u) => User.fromJson(u as Map<String, dynamic>)).toList();
@@ -100,12 +106,6 @@ class ApiService {
     final data = await _request('POST', '/auth/login',
         body: {'user_id': userId, 'pin': pin}, auth: false);
     return data as Map<String, dynamic>;
-  }
-
-  Future<User> createUser(String displayName, String pin) async {
-    final data = await _request('POST', '/users',
-        body: {'display_name': displayName, 'pin': pin}, auth: false);
-    return User.fromJson(data as Map<String, dynamic>);
   }
 
   Future<User> me() async =>
